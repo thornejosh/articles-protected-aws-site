@@ -4,11 +4,14 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as cloudfront from "aws-cdk-lib/aws-cloudfront";
 import * as origins from "aws-cdk-lib/aws-cloudfront-origins";
 import * as s3deploy from "aws-cdk-lib/aws-s3-deployment";
-import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as path from "path";
 
+interface ProtectedAwsSiteStackProps extends cdk.StackProps {
+  existingEdgeFunction: cloudfront.experimental.EdgeFunction;
+}
+
 export class ProtectedAwsSiteStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: ProtectedAwsSiteStackProps) {
     super(scope, id, props);
 
     // Create an S3 bucket to host the website
@@ -18,12 +21,9 @@ export class ProtectedAwsSiteStack extends cdk.Stack {
       autoDeleteObjects: true,
     });
 
-    // Create Lambda@Edge function for basic authentication
-    const authFunction = new cloudfront.experimental.EdgeFunction(this, "AuthFunction", {
-      runtime: lambda.Runtime.NODEJS_18_X,
-      handler: "index.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "auth-handler")),
-    });
+    if (!props?.existingEdgeFunction) {
+      throw new Error('existingEdgeFunction is required');
+    }
 
     // Create CloudFront distribution
     const distribution = new cloudfront.Distribution(
@@ -34,7 +34,7 @@ export class ProtectedAwsSiteStack extends cdk.Stack {
           origin: new origins.S3Origin(siteBucket),
           edgeLambdas: [
             {
-              functionVersion: authFunction.currentVersion,
+              functionVersion: props?.existingEdgeFunction?.currentVersion,
               eventType: cloudfront.LambdaEdgeEventType.VIEWER_REQUEST,
             },
           ],
